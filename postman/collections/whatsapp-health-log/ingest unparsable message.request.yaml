@@ -1,0 +1,34 @@
+$kind: http-request
+name: Ingest unparsable message
+method: POST
+url: '{{base_url}}/ingest'
+order: 3000
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "messageId": "wamid.{{$guid}}",
+      "text": "sugar was 100 this morning after breakfast"
+    }
+examples: './.resources/ingest unparsable message.resources/examples'
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      const body = pm.response.json();
+
+      // Free-form text is refused rather than guessed at: a plausible-looking
+      // wrong number is worse than no row. This is still a 200 - the request
+      // was handled correctly, the message simply was not loggable.
+      pm.test('responds 200', () => pm.response.to.have.status(200));
+
+      pm.test('reports the message as unparsed', () => {
+        pm.expect(body.status).to.eql('unparsed');
+      });
+
+      pm.test('explains the expected format', () => {
+        pm.expect(body.reason).to.include('blood sugar');
+      });

@@ -1,0 +1,21 @@
+$kind: http-example
+name: '200 OK'
+order: 1000
+request:
+  url: '{{base_url}}/health'
+  method: GET
+response:
+  statusCode: 200
+  statusText: OK
+  headers:
+    - key: Content-Type
+      value: application/json; charset=utf-8
+  body:
+    type: json
+    content: |-
+      {
+        "status": "ok",
+        "dryRun": true,
+        "whatsappEnabled": true,
+        "tzOffsetMinutes": 420
+      }

@@ -1,0 +1,14 @@
+$kind: collection
+name: WhatsApp Health Log
+description: |-
+  Turns a WhatsApp health-log message into a spreadsheet row.
+
+  The contract here is the canonical message event, not the WhatsApp client, so
+  every request in this collection runs against the local HTTP surface without
+  a logged-in WhatsApp session. `base_url` comes from the environment (a target
+  address is configuration, not part of the collection) - run with
+  `-e "postman/environments/Local.environment.yaml"`.
+
+  Statuses are a discriminated union on `status`: `appended`, `duplicate`,
+  `unparsed`, `error`. `duplicate` is the expected result of a redelivery, not
+  a failure, so assertions branch on it rather than requiring `appended`.

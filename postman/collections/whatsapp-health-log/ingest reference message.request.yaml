@@ -1,0 +1,91 @@
+$kind: http-request
+name: Ingest reference message
+method: POST
+url: '{{base_url}}/ingest'
+order: 2000
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "source": "whatsapp-personal",
+      "messageId": "{{message_id}}",
+      "chatId": "6281234567890@s.whatsapp.net",
+      "senderId": "6281234567890@s.whatsapp.net",
+      "senderName": "Me",
+      "sentAt": "2026-10-19T01:09:00.000Z",
+      "receivedAt": "2026-10-19T01:09:01.000Z",
+      "text": "date: 2026-10-19\nblood sugar: 100\ntime check: 08.08 am\nnotes: it's normal after breakfast"
+    }
+examples: './.resources/ingest reference message.resources/examples'
+scripts:
+  - type: beforeRequest
+    language: text/javascript
+    code: |-
+      // Unique per execution, so the first POST always appends and the replay
+      // below proves the *same* id is suppressed. Deliberately not {{$guid}}:
+      // that re-resolves on the replay, which would append for real and hide a
+      // broken dedupe check behind a passing request.
+      pm.variables.set(
+        'message_id',
+        `wamid.run-${Date.now()}-${Math.random().toString(36).slice(2)}`
+      );
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test('responds 200', () => pm.response.to.have.status(200));
+
+      const body = pm.response.json();
+
+      pm.test('appends the row', () => {
+        pm.expect(body.status).to.eql('appended');
+      });
+
+      pm.test('reads the blood sugar and unit', () => {
+        pm.expect(body.reading.bloodSugar).to.eql(100);
+        pm.expect(body.reading.unit).to.eql('mg/dL');
+      });
+
+      pm.test('normalises 08.08 am to 08:08', () => {
+        pm.expect(body.reading.timeCheckLocal).to.eql('08:08');
+      });
+
+      // 08:08 at UTC+7 is 01:08Z. This is the assertion that catches a
+      // timezone regression, which is otherwise invisible in the sheet.
+      pm.test('converts the local time to UTC', () => {
+        pm.expect(body.reading.measuredAt).to.eql('2026-10-19T01:08:00.000Z');
+      });
+
+      pm.test('keeps the notes verbatim', () => {
+        pm.expect(body.reading.notes).to.eql("it's normal after breakfast");
+      });
+
+      pm.test('writes one cell per sheet column', () => {
+        pm.expect(body.row).to.have.lengthOf(10);
+      });
+
+      pm.test('warns that the unit was assumed', () => {
+        pm.expect(body.warnings.length).to.eql(1);
+      });
+
+      // Idempotency is the guarantee that a redelivery cannot double-log a
+      // reading, so it is checked by replaying the exact bytes just sent.
+      // replaceIn resolves {{message_id}} to the value used in this execution.
+      (async () => {
+        const replay = await pm.sendRequest({
+          url: `${pm.variables.get('base_url')}/ingest`,
+          method: 'POST',
+          header: { 'Content-Type': 'application/json' },
+          body: { mode: 'raw', raw: pm.variables.replaceIn(pm.request.body.raw) }
+        });
+
+        pm.test('replaying the same delivery is suppressed', () => {
+          pm.expect(replay.json().status).to.eql('duplicate');
+        });
+
+        pm.test('the replay appended nothing', () => {
+          pm.expect(replay.json().row).to.be.undefined;
+        });
+      })();

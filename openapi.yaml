@@ -1,0 +1,293 @@
+openapi: 3.1.0
+info:
+  title: WhatsApp Health Log
+  version: 0.1.0
+  description: |
+    Turns a WhatsApp message into a row in a spreadsheet.
+
+    The contract is the canonical message event, not the WhatsApp client. That
+    keeps the parse/dedupe/append pipeline runnable and testable without a
+    logged-in WhatsApp session, and means swapping the unofficial Baileys
+    transport for the official Cloud API webhook only changes the mapping into
+    this shape.
+  license:
+    name: UNLICENSED
+servers:
+  - url: http://127.0.0.1:8787
+    description: Local development
+
+paths:
+  /health:
+    get:
+      summary: Liveness probe
+      operationId: getHealth
+      tags: [Operations]
+      responses:
+        "200":
+          description: Process is up and serving requests.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, dryRun, whatsappEnabled, tzOffsetMinutes]
+                properties:
+                  status:
+                    type: string
+                    const: ok
+                  dryRun:
+                    type: boolean
+                    description: When true, rows are logged instead of written to the spreadsheet.
+                  whatsappEnabled:
+                    type: boolean
+                  tzOffsetMinutes:
+                    type: integer
+                    description: Minutes east of UTC used to interpret `time check`.
+                    examples: [420]
+              example:
+                status: ok
+                dryRun: true
+                whatsappEnabled: true
+                tzOffsetMinutes: 420
+
+  /ingest:
+    post:
+      summary: Ingest one health-log message
+      description: |
+        Accepts a captured message and reports what happened to it. Every
+        response is a discriminated union on `status`, so a caller can branch
+        without inferring meaning from the HTTP code.
+
+        Posting the same `messageId` twice is safe: the second call returns
+        `duplicate` and appends nothing.
+      operationId: postIngest
+      tags: [Ingest]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - $ref: "#/components/schemas/CanonicalMessage"
+                - $ref: "#/components/schemas/ShorthandMessage"
+              discriminator:
+                propertyName: kind
+                mapping:
+                  canonical: "#/components/schemas/CanonicalMessage"
+                  shorthand: "#/components/schemas/ShorthandMessage"
+            examples:
+              shorthand:
+                summary: The minimum a caller needs to send
+                value:
+                  text: "date: 2026-10-19\nblood sugar: 100\ntime check: 08.08 am\nnotes: it's normal after breakfast"
+              canonical:
+                summary: Full event as delivered by the WhatsApp transport
+                value:
+                  source: whatsapp-personal
+                  messageId: wamid.HBgNNjI4MTIzNDU2Nzg5MBUCABIYFjE3NjAwMDAwMDAwMDAwAA==
+                  chatId: 6281234567890@s.whatsapp.net
+                  senderId: 6281234567890@s.whatsapp.net
+                  senderName: Me
+                  sentAt: "2026-10-19T01:09:00.000Z"
+                  receivedAt: "2026-10-19T01:09:01.000Z"
+                  text: "date: 2026-10-19\nblood sugar: 100\ntime check: 08.08 am\nnotes: it's normal after breakfast"
+      responses:
+        "200":
+          description: The message was handled (appended, skipped as a duplicate, or unparsed).
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/Appended"
+                  - $ref: "#/components/schemas/Duplicate"
+                  - $ref: "#/components/schemas/Unparsed"
+              examples:
+                appended:
+                  value:
+                    status: appended
+                    reading:
+                      measuredAt: "2026-10-19T01:08:00.000Z"
+                      bloodSugar: 100
+                      unit: mg/dL
+                      timeCheckLocal: "08:08"
+                      notes: it's normal after breakfast
+                    row:
+                      - "2026-10-19T01:09:01.000Z"
+                      - "2026-10-19T01:08:00.000Z"
+                      - "08:08"
+                      - "100"
+                      - mg/dL
+                      - it's normal after breakfast
+                      - 6281234567890@s.whatsapp.net
+                      - Me
+                      - wamid.HBgNNjI4MTIzNDU2Nzg5MBUCABIYFjE3NjAwMDAwMDAwMDAwAA==
+                      - "blood sugar: 100 | time check: 08.08 am"
+                    warnings: []
+                duplicate:
+                  value:
+                    status: duplicate
+                    messageId: wamid.HBgNNjI4MTIzNDU2Nzg5MBUCABIYFjE3NjAwMDAwMDAwMDAwAA==
+                unparsed:
+                  value:
+                    status: unparsed
+                    reason: No recognised fields. Expected lines like 'blood sugar: 100' and 'time check: 08.08 am'.
+                    warnings: []
+        "400":
+          description: Malformed request - missing text or invalid JSON.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RequestError"
+        "404":
+          description: Unknown route.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RequestError"
+        "500":
+          description: The spreadsheet write failed. The message id is not recorded, so a retry is safe.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorOutcome"
+
+components:
+  schemas:
+    CanonicalMessage:
+      type: object
+      title: CanonicalMessage
+      required: [source, messageId, chatId, senderId, sentAt, receivedAt, text]
+      properties:
+        source:
+          type: string
+          const: whatsapp-personal
+        messageId:
+          type: string
+          description: WhatsApp message id. Used as the idempotency key.
+        chatId:
+          type: string
+        senderId:
+          type: string
+        senderName:
+          type: string
+        sentAt:
+          type: string
+          format: date-time
+        receivedAt:
+          type: string
+          format: date-time
+        text:
+          type: string
+      examples:
+        - source: whatsapp-personal
+          messageId: wamid.EXAMPLE
+          chatId: 6281234567890@s.whatsapp.net
+          senderId: 6281234567890@s.whatsapp.net
+          sentAt: "2026-10-19T01:09:00.000Z"
+          receivedAt: "2026-10-19T01:09:01.000Z"
+          text: "blood sugar: 100"
+
+    ShorthandMessage:
+      type: object
+      title: ShorthandMessage
+      required: [text]
+      properties:
+        text:
+          type: string
+          description: Only the message body. Other fields are derived.
+        messageId:
+          type: string
+          description: Defaults to a hash of `text`, so repeating the same body is treated as a duplicate.
+        chatId:
+          type: string
+        senderId:
+          type: string
+        senderName:
+          type: string
+        sentAt:
+          type: string
+          format: date-time
+        receivedAt:
+          type: string
+          format: date-time
+
+    Reading:
+      type: object
+      required: [measuredAt, bloodSugar, unit, timeCheckLocal, notes]
+      properties:
+        measuredAt:
+          type: string
+          format: date-time
+          description: UTC instant built from the parsed date and `time check`.
+        bloodSugar:
+          type: number
+        unit:
+          type: string
+          enum: [mg/dL, mmol/L]
+        timeCheckLocal:
+          type: string
+          nullable: true
+          pattern: "^([01][0-9]|2[0-3]):[0-5][0-9]$"
+          examples: ["08:08"]
+        notes:
+          type: string
+          nullable: true
+
+    Appended:
+      type: object
+      required: [status, reading, row, warnings]
+      properties:
+        status:
+          type: string
+          const: appended
+        reading:
+          $ref: "#/components/schemas/Reading"
+        row:
+          type: array
+          description: The exact cell values written, in COLUMNS order.
+          items:
+            type: string
+        warnings:
+          type: array
+          items:
+            type: string
+
+    Duplicate:
+      type: object
+      required: [status, messageId]
+      properties:
+        status:
+          type: string
+          const: duplicate
+        messageId:
+          type: string
+
+    Unparsed:
+      type: object
+      required: [status, reason, warnings]
+      properties:
+        status:
+          type: string
+          const: unparsed
+        reason:
+          type: string
+        warnings:
+          type: array
+          items:
+            type: string
+
+    ErrorOutcome:
+      type: object
+      required: [status, reason]
+      properties:
+        status:
+          type: string
+          const: error
+        reason:
+          type: string
+
+    RequestError:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string

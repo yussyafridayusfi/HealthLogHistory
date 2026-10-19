@@ -1,0 +1,31 @@
+{
+  "name": "whatsapp-health-log",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "tsx src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --test tests/parser.test.ts",
+    "sheet:check": "tsx src/sheet-check.ts",
+    "smoke": "node scripts/smoke.mjs",
+    "verify:api": "postman collection run postman/collections/whatsapp-health-log -e postman/environments/Local.environment.yaml"
+  },
+  "dependencies": {
+    "@whiskeysockets/baileys": "^6.7.24",
+    "dotenv": "^18.0.8",
+    "googleapis": "^186.0.0",
+    "pino": "^10.4.0",
+    "qrcode-terminal": "^0.12.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "@types/qrcode-terminal": "^0.12.2",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
+  }
+}

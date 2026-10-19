@@ -1,0 +1,6 @@
+localResources:
+  specs:
+    - ../openapi.yaml
+workspace:
+  id: 8e83d88b-8437-4962-8fd0-a27e91af55a2
+  name: My Workspace

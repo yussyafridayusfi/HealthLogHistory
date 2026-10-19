@@ -1,0 +1,24 @@
+$kind: http-request
+name: Reject malformed JSON
+method: POST
+url: '{{base_url}}/ingest'
+order: 5000
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: text
+  content: |-
+    {"text": "blood sugar: 100"
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test('responds 400', () => pm.response.to.have.status(400));
+
+      // The error must be the documented JSON shape, not an HTML error page or
+      // a raw stack trace: callers branch on `.error`.
+      pm.test('returns the documented error shape', () => {
+        const body = pm.response.json();
+        pm.expect(body.error).to.be.a('string');
+      });

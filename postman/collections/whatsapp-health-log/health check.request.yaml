@@ -1,0 +1,27 @@
+$kind: http-request
+name: Health check
+method: GET
+url: '{{base_url}}/health'
+order: 1000
+examples: './.resources/health check.resources/examples'
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test('responds 200', () => pm.response.to.have.status(200));
+
+      const body = pm.response.json();
+
+      pm.test('status is ok', () => {
+        pm.expect(body.status).to.eql('ok');
+      });
+
+      // Surfaced so a run against an unexpected instance is obvious: a monitor
+      // pointed at a dry-run server proves nothing about the live write path.
+      pm.test('reports the tz offset it will use', () => {
+        pm.expect(body.tzOffsetMinutes).to.be.a('number');
+      });
+
+      pm.test('reports whether writes are live', () => {
+        pm.expect(body.dryRun).to.be.a('boolean');
+      });

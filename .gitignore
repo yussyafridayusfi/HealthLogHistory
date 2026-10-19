@@ -147,3 +147,14 @@ vite.config.ts.timestamp-*
 
 # Turbo Repo
 .turbo
+
+# WhatsApp session credentials (Baileys) - grants full access to the linked
+# account, and is recoverable only by re-scanning the QR code.
+.state/
+
+# Service-account key files. These are credentials: a committed key can be used
+# by anyone who finds it. Both spellings are covered so a rename cannot silently
+# expose the key, and the filename pattern guards against it being moved.
+secret/
+secrets/
+*service-account*.json

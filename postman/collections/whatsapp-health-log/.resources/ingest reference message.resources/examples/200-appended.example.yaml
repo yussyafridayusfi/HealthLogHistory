@@ -1,0 +1,40 @@
+$kind: http-example
+name: '200 appended'
+order: 1000
+request:
+  url: '{{base_url}}/ingest'
+  method: POST
+response:
+  statusCode: 200
+  statusText: OK
+  headers:
+    - key: Content-Type
+      value: application/json; charset=utf-8
+  body:
+    type: json
+    content: |-
+      {
+        "status": "appended",
+        "row": [
+          "2026-10-19T01:09:01.000Z",
+          "2026-10-19T01:08:00.000Z",
+          "08:08",
+          "100",
+          "mg/dL",
+          "it's normal after breakfast",
+          "6281234567890@s.whatsapp.net",
+          "Me",
+          "wamid.HBgNNjI4MTIzNDU2Nzg5MBUCABIYFjE3NjAwMDAwMDAwMDAwAA==",
+          "date: 2026-10-19 | blood sugar: 100 | time check: 08.08 am | notes: it's normal after breakfast"
+        ],
+        "warnings": [
+          "No unit given; assumed mg/dL for 100. Send \"blood sugar: 100 mmol/L\" to be explicit."
+        ],
+        "reading": {
+          "measuredAt": "2026-10-19T01:08:00.000Z",
+          "bloodSugar": 100,
+          "unit": "mg/dL",
+          "timeCheckLocal": "08:08",
+          "notes": "it's normal after breakfast"
+        }
+      }

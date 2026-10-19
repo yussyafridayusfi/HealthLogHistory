@@ -1,0 +1,10 @@
+name: Local
+values:
+  - key: base_url
+    value: 'http://127.0.0.1:8787'
+    enabled: true
+    type: default
+    description: >-
+      Local instance (npm start). The target address lives here rather than in
+      the collection so the same collection can be pointed at a deployed
+      instance later without editing requests.
